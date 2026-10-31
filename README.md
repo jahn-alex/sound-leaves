@@ -1,2 +1,2 @@
-# sound-leaves
+# Sound Leaves
 Music Sheet Organizer

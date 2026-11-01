@@ -15,6 +15,8 @@ The whole app should be built to be viewed on desktop and on mobile:
 - Supabase Postgres Database for Metadata (+ Supabase Auth for logins)
 - Cloudflare R2 for pdfs and audio files
 
+Code structure and rules: see [architecture.md](architecture.md).
+
 ## Users and Roles
 
 All band members log in. There are two roles:
@@ -50,16 +52,16 @@ erDiagram
 
 **songs**
 
-| Field         | Notes                       |
-| ------------- | --------------------------- |
-| id            |                             |
-| nummer        | Song number in band library |
-| titel *       | Title                       |
-| text_musik    | Lyrics & music (writers)    |
-| arrangement   | Arranger                    |
-| artist        |                             |
-| genres        | Free tags (multiple)        |
-| tempo_bpm     | Integer                     |
+| Field            | Notes (German UI label)            |
+| ---------------- | ---------------------------------- |
+| id               |                                    |
+| number           | Nummer: song number in band library |
+| title *          | Titel                              |
+| lyrics_and_music | Text & Musik (writers)             |
+| arrangement      | Arrangement (arranger)             |
+| artist           | Artist                             |
+| genres           | Genre/s: free tags (multiple)      |
+| tempo_bpm        | Tempo (bpm), integer               |
 
 **instruments**
 
@@ -114,6 +116,19 @@ erDiagram
 - Audio: `audio/{song_id}/{audio_id}.mp3`
 
 ## Views
+
+### Navigation
+
+| Route         | View                 | UI label        |
+| ------------- | -------------------- | --------------- |
+| `/login`      | Login (mockup)       | Anmelden        |
+| `/`           | Home                 | Start           |
+| `/upload`     | 1. File Upload View  | Hochladen       |
+| `/library`    | 2. Data View         | Bibliothek      |
+| `/completion` | 3. Completion View   | Vollständigkeit |
+| `/playing`    | 4. Playing View      | Spielen         |
+
+All views except login share one layout: a header with the app name and "Abmelden", and a side navigation that collapses behind a burger menu on mobile. Nav items are defined in `src/app/navigation.ts`.
 
 ### 1. File Upload View
 

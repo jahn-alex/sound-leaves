@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <base target="_top">
+    <?!= include('Styles') ?>
+  </head>
+  <body>
+    <header>
+      <h1>Sound Leaves</h1>
+      <p>Noten oder Aufnahmen hochladen</p>
+    </header>
+
+    <main>
+      <div class="card">
+        <p id="loading" class="muted">Lade Songs und Instrumente …</p>
+
+        <form id="upload-form" class="hidden" novalidate>
+          <label for="uploader-name">Dein Name</label>
+          <input type="text" id="uploader-name" autocomplete="name" required>
+
+          <label>Was lädst du hoch?</label>
+          <div class="type-switch">
+            <label><input type="radio" name="type" value="sheet" checked><span>Noten (PDF)</span></label>
+            <label><input type="radio" name="type" value="audio"><span>Audio (MP3)</span></label>
+          </div>
+
+          <label for="song">Song</label>
+          <input type="text" id="song" list="song-list" placeholder="Tippen zum Suchen …" autocomplete="off" required>
+          <datalist id="song-list"></datalist>
+
+          <div id="instrument-field">
+            <label for="instrument">Instrument</label>
+            <select id="instrument" required></select>
+          </div>
+
+          <label for="label">Version <span class="optional">(optional, z. B. „Original“, „mit Notizen“, „Live 2025“)</span></label>
+          <input type="text" id="label">
+
+          <label for="note">Notiz <span class="optional">(optional)</span></label>
+          <textarea id="note"></textarea>
+
+          <label for="file">Datei</label>
+          <input type="file" id="file" accept=".pdf,application/pdf" required>
+
+          <button type="submit" id="submit-button">Hochladen</button>
+        </form>
+
+        <div id="message" class="message hidden"></div>
+        <button type="button" id="again-button" class="secondary hidden">Weitere Datei hochladen</button>
+      </div>
+    </main>
+
+    <script>
+      const form = document.getElementById('upload-form');
+      const loading = document.getElementById('loading');
+      const message = document.getElementById('message');
+      const submitButton = document.getElementById('submit-button');
+      const againButton = document.getElementById('again-button');
+      const uploaderNameInput = document.getElementById('uploader-name');
+      const songInput = document.getElementById('song');
+      const songList = document.getElementById('song-list');
+      const instrumentField = document.getElementById('instrument-field');
+      const instrumentSelect = document.getElementById('instrument');
+      const labelInput = document.getElementById('label');
+      const noteInput = document.getElementById('note');
+      const fileInput = document.getElementById('file');
+
+      const FILE_ACCEPT = { sheet: '.pdf,application/pdf', audio: '.mp3,audio/mpeg' };
+      const FILE_EXTENSION = { sheet: 'pdf', audio: 'mp3' };
+      const NAME_STORAGE_KEY = 'soundLeavesUploaderName';
+
+      let options = { songs: [], instruments: [], maxFileSizeMb: 40 };
+
+      function selectedType() {
+        return form.querySelector('input[name="type"]:checked').value;
+      }
+
+      function showMessage(text, kind) {
+        message.textContent = text;
+        message.className = 'message ' + kind;
+      }
+
+      function hideMessage() {
+        message.className = 'message hidden';
+      }
+
+      function fillOptions(loaded) {
+        options = loaded;
+        options.songs.forEach((song) => {
+          const option = document.createElement('option');
+          option.value = song;
+          songList.appendChild(option);
+        });
+
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = 'Bitte wählen …';
+        instrumentSelect.appendChild(placeholder);
+        options.instruments.forEach((instrument) => {
+          const option = document.createElement('option');
+          option.value = instrument;
+          option.textContent = instrument;
+          instrumentSelect.appendChild(option);
+        });
+
+        loading.classList.add('hidden');
+        form.classList.remove('hidden');
+      }
+
+      function updateForType() {
+        const type = selectedType();
+        instrumentField.classList.toggle('hidden', type !== 'sheet');
+        fileInput.accept = FILE_ACCEPT[type];
+        fileInput.value = '';
+      }
+
+      function validate() {
+        const type = selectedType();
+        if (!uploaderNameInput.value.trim()) return 'Bitte deinen Namen angeben.';
+        if (options.songs.indexOf(songInput.value.trim()) === -1) return 'Bitte einen Song aus der Liste auswählen.';
+        if (type === 'sheet' && !instrumentSelect.value) return 'Bitte ein Instrument auswählen.';
+        const file = fileInput.files[0];
+        if (!file) return 'Bitte eine Datei auswählen.';
+        if (file.name.split('.').pop().toLowerCase() !== FILE_EXTENSION[type]) {
+          return 'Bitte eine .' + FILE_EXTENSION[type] + '-Datei auswählen.';
+        }
+        if (file.size > options.maxFileSizeMb * 1024 * 1024) {
+          return 'Die Datei ist zu groß (max. ' + options.maxFileSizeMb + ' MB).';
+        }
+        return '';
+      }
+
+      function readAsBase64(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          // result looks like "data:application/pdf;base64,AAAA" – only the part after the comma is needed
+          reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+          reader.onerror = () => reject(new Error('Die Datei konnte nicht gelesen werden.'));
+          reader.readAsDataURL(file);
+        });
+      }
+
+      async function handleSubmit(event) {
+        event.preventDefault();
+        hideMessage();
+
+        const error = validate();
+        if (error) {
+          showMessage(error, 'error');
+          return;
+        }
+
+        const file = fileInput.files[0];
+        submitButton.disabled = true;
+        submitButton.textContent = 'Wird hochgeladen …';
+
+        try {
+          const base64 = await readAsBase64(file);
+          const payload = {
+            uploaderName: uploaderNameInput.value.trim(),
+            type: selectedType(),
+            song: songInput.value.trim(),
+            instrument: instrumentSelect.value,
+            label: labelInput.value.trim(),
+            note: noteInput.value.trim(),
+            fileName: file.name,
+            mimeType: file.type,
+            base64,
+          };
+          google.script.run
+            .withSuccessHandler(handleSuccess)
+            .withFailureHandler(handleFailure)
+            .uploadFile(payload);
+        } catch (readError) {
+          handleFailure(readError);
+        }
+      }
+
+      function handleSuccess(result) {
+        try { localStorage.setItem(NAME_STORAGE_KEY, uploaderNameInput.value.trim()); } catch (e) {}
+        form.classList.add('hidden');
+        againButton.classList.remove('hidden');
+        showMessage('Danke! Gespeichert als „' + result.fileName + '“.', 'success');
+        resetButton();
+      }
+
+      function handleFailure(error) {
+        showMessage((error && error.message) || 'Hochladen fehlgeschlagen. Bitte erneut versuchen.', 'error');
+        resetButton();
+      }
+
+      function resetButton() {
+        submitButton.disabled = false;
+        submitButton.textContent = 'Hochladen';
+      }
+
+      function startAgain() {
+        songInput.value = '';
+        instrumentSelect.value = '';
+        labelInput.value = '';
+        noteInput.value = '';
+        fileInput.value = '';
+        hideMessage();
+        againButton.classList.add('hidden');
+        form.classList.remove('hidden');
+      }
+
+      form.addEventListener('submit', handleSubmit);
+      againButton.addEventListener('click', startAgain);
+      form.querySelectorAll('input[name="type"]').forEach((radio) => radio.addEventListener('change', updateForType));
+
+      try { uploaderNameInput.value = localStorage.getItem(NAME_STORAGE_KEY) || ''; } catch (e) {}
+
+      google.script.run
+        .withSuccessHandler(fillOptions)
+        .withFailureHandler((error) => {
+          loading.classList.add('hidden');
+          showMessage((error && error.message) || 'Die Seite konnte nicht geladen werden.', 'error');
+        })
+        .getFormOptions();
+    </script>
+  </body>
+</html>

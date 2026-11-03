@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <base target="_top">
+    <?!= include('Styles') ?>
+    <style>
+      main { padding: 16px; }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px 20px;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+      .toolbar label { display: inline-flex; gap: 6px; align-items: center; margin: 0; font-weight: 500; }
+      .toolbar a { color: var(--accent); }
+      .summary { font-weight: 600; }
+
+      .table-wrap {
+        overflow: auto;
+        max-height: calc(100vh - 150px);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+      }
+
+      table { border-collapse: separate; border-spacing: 0; font-size: 0.9rem; }
+      th, td { padding: 6px 10px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); white-space: nowrap; }
+
+      thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); text-align: center; }
+      tbody th, thead th:first-child { position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left; }
+      thead th:first-child { z-index: 3; }
+      tfoot td, tfoot th { background: var(--bg); font-weight: 600; text-align: center; }
+      tfoot th { position: sticky; left: 0; text-align: left; }
+
+      td.cell { text-align: center; min-width: 72px; }
+      td.ok { background: var(--ok-bg); color: var(--ok-text); }
+      td.missing { background: var(--missing-bg); color: var(--missing-text); }
+      td.ok a { color: inherit; font-weight: 600; text-decoration: none; }
+      td.audio-col { border-left: 2px solid var(--muted); }
+      td.percent { text-align: right; color: var(--muted); }
+
+      .unmatched { margin-top: 20px; }
+      .unmatched h2 { font-size: 1rem; margin: 0 0 6px; }
+      .unmatched ul { margin: 0; padding-left: 20px; }
+      .unmatched a { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Sound Leaves – Übersicht</h1>
+      <p>Welche Noten fehlen pro Song und Instrument?</p>
+    </header>
+
+    <main>
+      <p id="loading" class="muted">Lade Übersicht … (bei vielen Songs kann das etwas dauern)</p>
+      <div id="message" class="message hidden"></div>
+
+      <div id="content" class="hidden">
+        <div class="toolbar">
+          <span id="summary" class="summary"></span>
+          <label><input type="checkbox" id="only-incomplete"> nur unvollständige Songs</label>
+          <a id="folder-link" href="#" target="_blank" rel="noopener">Drive-Ordner</a>
+          <a id="spreadsheet-link" href="#" target="_blank" rel="noopener">Tabelle (Songs & Instrumente)</a>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead id="table-head"></thead>
+            <tbody id="table-body"></tbody>
+            <tfoot id="table-foot"></tfoot>
+          </table>
+        </div>
+
+        <div id="unmatched" class="unmatched hidden">
+          <h2>Ordner ohne passenden Eintrag in der Tabelle</h2>
+          <p class="muted">Z. B. nach dem Umbenennen eines Songs. Ordner umbenennen oder Tabelle anpassen.</p>
+          <ul id="unmatched-list"></ul>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      const loading = document.getElementById('loading');
+      const message = document.getElementById('message');
+      const content = document.getElementById('content');
+      const onlyIncompleteInput = document.getElementById('only-incomplete');
+
+      let data = null;
+
+      function element(tag, text, className) {
+        const node = document.createElement(tag);
+        if (text !== undefined) node.textContent = text;
+        if (className) node.className = className;
+        return node;
+      }
+
+      function percent(done, total) {
+        return total === 0 ? '–' : Math.round((done / total) * 100) + ' %';
+      }
+
+      function statusCell(entry, extraClass) {
+        const cell = element('td', undefined, 'cell ' + (entry.count > 0 ? 'ok' : 'missing') + (extraClass ? ' ' + extraClass : ''));
+        if (entry.count > 0) {
+          const link = element('a', entry.count > 1 ? '✓ ' + entry.count : '✓');
+          link.href = entry.url;
+          link.target = '_blank';
+          link.rel = 'noopener';
+          link.title = entry.count + ' Datei(en) – Ordner öffnen';
+          cell.appendChild(link);
+        } else {
+          cell.textContent = 'fehlt';
+        }
+        return cell;
+      }
+
+      function renderHead() {
+        const row = element('tr');
+        row.appendChild(element('th', 'Song'));
+        data.instruments.forEach((instrument) => row.appendChild(element('th', instrument)));
+        row.appendChild(element('th', 'Noten'));
+        row.appendChild(element('th', 'Audio'));
+        const head = document.getElementById('table-head');
+        head.replaceChildren(row);
+      }
+
+      function renderBody() {
+        const onlyIncomplete = onlyIncompleteInput.checked;
+        const body = document.getElementById('table-body');
+        body.replaceChildren();
+
+        data.rows.forEach((row) => {
+          const done = row.cells.filter((cell) => cell.count > 0).length;
+          const complete = done === data.instruments.length && row.audio.count > 0;
+          if (onlyIncomplete && complete) return;
+
+          const tableRow = element('tr');
+          tableRow.appendChild(element('th', row.song));
+          row.cells.forEach((cell) => tableRow.appendChild(statusCell(cell)));
+          tableRow.appendChild(element('td', percent(done, data.instruments.length), 'percent'));
+          tableRow.appendChild(statusCell(row.audio, 'audio-col'));
+          body.appendChild(tableRow);
+        });
+
+        if (!body.children.length) {
+          const emptyRow = element('tr');
+          const cell = element('td', onlyIncomplete ? 'Alles vollständig 🎉' : 'Noch keine Songs in der Tabelle.');
+          cell.colSpan = data.instruments.length + 3;
+          emptyRow.appendChild(cell);
+          body.appendChild(emptyRow);
+        }
+      }
+
+      function renderFoot() {
+        const songCount = data.rows.length;
+        const row = element('tr');
+        row.appendChild(element('th', 'Vollständig'));
+        data.instruments.forEach((_, index) => {
+          const done = data.rows.filter((songRow) => songRow.cells[index].count > 0).length;
+          row.appendChild(element('td', percent(done, songCount)));
+        });
+        const totalCells = songCount * data.instruments.length;
+        const doneCells = data.rows.reduce((sum, songRow) => sum + songRow.cells.filter((cell) => cell.count > 0).length, 0);
+        row.appendChild(element('td', percent(doneCells, totalCells)));
+        const audioDone = data.rows.filter((songRow) => songRow.audio.count > 0).length;
+        row.appendChild(element('td', percent(audioDone, songCount)));
+        document.getElementById('table-foot').replaceChildren(row);
+
+        document.getElementById('summary').textContent =
+          (totalCells - doneCells) + ' von ' + totalCells + ' Noten fehlen · ' +
+          (songCount - audioDone) + ' von ' + songCount + ' Songs ohne Audio';
+      }
+
+      function renderUnmatched() {
+        const list = document.getElementById('unmatched-list');
+        list.replaceChildren();
+        data.unmatchedFolders.forEach((folder) => {
+          const item = element('li');
+          const link = element('a', folder.path);
+          link.href = folder.url;
+          link.target = '_blank';
+          link.rel = 'noopener';
+          item.appendChild(link);
+          list.appendChild(item);
+        });
+        document.getElementById('unmatched').classList.toggle('hidden', data.unmatchedFolders.length === 0);
+      }
+
+      function render(loaded) {
+        data = loaded;
+        document.getElementById('folder-link').href = data.rootFolderUrl;
+        document.getElementById('spreadsheet-link').href = data.spreadsheetUrl;
+        renderHead();
+        renderBody();
+        renderFoot();
+        renderUnmatched();
+        loading.classList.add('hidden');
+        content.classList.remove('hidden');
+      }
+
+      function showError(error) {
+        loading.classList.add('hidden');
+        message.textContent = (error && error.message) || 'Die Übersicht konnte nicht geladen werden.';
+        message.className = 'message error';
+      }
+
+      onlyIncompleteInput.addEventListener('change', () => data && renderBody());
+
+      google.script.run
+        .withSuccessHandler(render)
+        .withFailureHandler(showError)
+        .getDashboardData();
+    </script>
+  </body>
+</html>

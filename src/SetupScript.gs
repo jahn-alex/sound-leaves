@@ -20,15 +20,20 @@ function setup() {
   Logger.log('Tabelle: ' + spreadsheet.getUrl());
 }
 
+// The root is the Drive folder that contains this script project.
+// Move the project and run setup() again to use a different folder.
 function getOrCreateRootFolder_(properties) {
-  const storedId = properties.getProperty(PROPERTY_KEYS.rootFolderId);
-  const folderId = EXISTING_ROOT_FOLDER_ID || storedId;
-  if (folderId) {
-    const folder = DriveApp.getFolderById(folderId);
-    properties.setProperty(PROPERTY_KEYS.rootFolderId, folder.getId());
-    return folder;
+  let scriptFile;
+  try {
+    scriptFile = DriveApp.getFileById(ScriptApp.getScriptId());
+  } catch (error) {
+    throw new Error('Das Skriptprojekt wurde in Drive nicht gefunden. Bitte ein eigenständiges Projekt verwenden (nicht an eine Tabelle gebunden).');
   }
-  const folder = DriveApp.createFolder(APP_NAME);
+  const parents = scriptFile.getParents();
+  if (!parents.hasNext()) {
+    throw new Error('Das Skriptprojekt liegt in keinem Ordner. Bitte in einen Drive-Ordner verschieben.');
+  }
+  const folder = parents.next();
   properties.setProperty(PROPERTY_KEYS.rootFolderId, folder.getId());
   return folder;
 }
@@ -36,7 +41,9 @@ function getOrCreateRootFolder_(properties) {
 function getOrCreateSpreadsheet_(properties, rootFolder) {
   const storedId = properties.getProperty(PROPERTY_KEYS.spreadsheetId);
   if (storedId) {
-    return SpreadsheetApp.openById(storedId);
+    const spreadsheet = SpreadsheetApp.openById(storedId);
+    DriveApp.getFileById(spreadsheet.getId()).moveTo(rootFolder);
+    return spreadsheet;
   }
   const spreadsheet = SpreadsheetApp.create(SPREADSHEET_NAME);
   DriveApp.getFileById(spreadsheet.getId()).moveTo(rootFolder);

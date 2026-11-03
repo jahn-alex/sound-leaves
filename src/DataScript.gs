@@ -27,7 +27,7 @@ function readRows_(tabName) {
 
 /**
  * Songs sorted by number (songs without number last, then by title).
- * `label` is the unique key used in forms and as Drive folder name.
+ * `label` ("007 Songtitel") is the unique key used in forms and as Drive folder name.
  */
 function readSongs() {
   const songs = readRows_(TAB_NAMES.songs)
@@ -36,7 +36,7 @@ function readSongs() {
     .map((song) => ({
       number: song.number,
       title: song.title,
-      label: sanitizeName_(song.number ? song.number + ' ' + song.title : song.title),
+      label: padSongNumber_(song.number) + ' ' + sanitizeName_(song.title),
     }));
 
   songs.sort((a, b) => {
@@ -92,4 +92,11 @@ function appendUploadLog(entry) {
 // Drive allows most characters, but these break paths or confuse people.
 function sanitizeName_(name) {
   return String(name).replace(/[\/\\:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim();
+}
+
+// "7" -> "007", "12a" -> "012a", "" -> "000"
+function padSongNumber_(number) {
+  const match = String(number).trim().match(/^(\d*)(.*)$/);
+  const digits = match[1].replace(/^0+(?=\d)/, '');
+  return digits.padStart(SONG_NUMBER_DIGITS, '0') + sanitizeName_(match[2]);
 }

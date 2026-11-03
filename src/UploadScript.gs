@@ -14,8 +14,9 @@ function uploadFile(payload) {
 
   const targetFolder = withLock_(() => getTargetFolder_(upload));
   const file = targetFolder.createFile(blob);
-  if (upload.note) {
-    file.setDescription(upload.note);
+  const description = [upload.label, upload.note].filter((part) => part).join(' – ');
+  if (description) {
+    file.setDescription(description);
   }
 
   appendUploadLog({
@@ -47,7 +48,8 @@ function validateUpload_(payload) {
   }
 
   const song = String(payload.song || '').trim();
-  if (readSongs().map((entry) => entry.label).indexOf(song) === -1) {
+  const songEntry = readSongs().find((entry) => entry.label === song);
+  if (!songEntry) {
     throw new Error('Bitte einen Song aus der Liste auswählen.');
   }
 
@@ -86,15 +88,14 @@ function validateUpload_(payload) {
     instrument,
     label,
     note,
-    fileName: buildFileName_(song, instrument, label, typeConfig.extension),
+    fileName: buildFileName_(songEntry, instrument, typeConfig.extension),
   };
 }
 
-// "<Song> - <Instrument> - <Label> - 2026-11-03 1612.pdf" (empty parts are left out)
-function buildFileName_(song, instrument, label, extension) {
-  const timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HHmm');
-  const parts = [song, instrument, label, timestamp].filter((part) => part);
-  return parts.join(' - ') + '.' + extension;
+// "007 Trompete Songtitel.pdf" / "007 Songtitel.mp3" (audio has no instrument)
+function buildFileName_(song, instrument, extension) {
+  const parts = [padSongNumber_(song.number), instrument, sanitizeName_(song.title)].filter((part) => part);
+  return parts.join(' ') + '.' + extension;
 }
 
 function getTargetFolder_(upload) {

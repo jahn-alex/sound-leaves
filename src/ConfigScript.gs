@@ -2,10 +2,6 @@
  * Central settings. Change values here, not in the other files.
  */
 
-// Optional: ID of an existing Drive folder (the part after /folders/ in its URL).
-// Leave empty to let setup() create a "Sound Leaves" folder at the top of My Drive.
-const EXISTING_ROOT_FOLDER_ID = '';
-
 const APP_NAME = 'Sound Leaves';
 const SPREADSHEET_NAME = 'Sound Leaves – Daten';
 
@@ -30,6 +26,9 @@ const UPLOAD_TYPES = {
   sheet: { label: 'Noten', extension: 'pdf', mimeTypes: ['application/pdf'] },
   audio: { label: 'Audio', extension: 'mp3', mimeTypes: ['audio/mpeg', 'audio/mp3'] },
 };
+
+// Song numbers in file names are padded with zeros to this many digits: 7 -> "007".
+const SONG_NUMBER_DIGITS = 3;
 
 // Files travel as base64 through google.script.run, which fails above ~50 MB.
 const MAX_FILE_SIZE_MB = 40;
